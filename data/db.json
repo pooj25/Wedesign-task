@@ -1,0 +1,31 @@
+{
+  "bookings": [
+    {
+      "id": "ZB-L03Q6Z",
+      "classId": "c1",
+      "className": "Cardio Salsa Blast",
+      "time": "Mon/Wed/Fri · 6:30 AM",
+      "instructor": "Priya Menon",
+      "price": 15,
+      "name": "Pooja Sharma",
+      "phone": "+91 90000 00000",
+      "bookedAt": "2026-07-19T09:47:38.612Z"
+    }
+  ],
+  "roster": [
+    {
+      "id": "ZB-L03Q6Z",
+      "classId": "c1",
+      "className": "Cardio Salsa Blast",
+      "time": "Mon/Wed/Fri · 6:30 AM",
+      "instructor": "Priya Menon",
+      "price": 15,
+      "name": "Pooja Sharma",
+      "phone": "+91 90000 00000",
+      "bookedAt": "2026-07-19T09:47:38.612Z",
+      "rosterType": "booking",
+      "attended": false
+    }
+  ],
+  "orders": []
+}
