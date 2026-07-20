@@ -12,6 +12,7 @@ const config = require('./config');
 
 const app = express();
 const DB_PATH = path.join(__dirname, 'data', 'db.json');
+const EMPTY_DB = { users: [], bookings: [], roster: [], orders: [] };
 
 // ===== MIDDLEWARE =====
 app.use(cors());
@@ -19,11 +20,22 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname), { index: 'index.html' }));
 
 // ===== DATABASE =====
+function normalizeDB(data = {}) {
+    return {
+        ...EMPTY_DB,
+        ...data,
+        users: Array.isArray(data.users) ? data.users : [],
+        bookings: Array.isArray(data.bookings) ? data.bookings : [],
+        roster: Array.isArray(data.roster) ? data.roster : [],
+        orders: Array.isArray(data.orders) ? data.orders : []
+    };
+}
+
 function readDB() {
     try {
-        return JSON.parse(fs.readFileSync(DB_PATH, 'utf-8'));
+        return normalizeDB(JSON.parse(fs.readFileSync(DB_PATH, 'utf-8')));
     } catch {
-        const fresh = { users: [], bookings: [], roster: [], orders: [] };
+        const fresh = normalizeDB();
         writeDB(fresh);
         return fresh;
     }
@@ -33,6 +45,8 @@ function writeDB(data) {
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2), 'utf-8');
 }
+
+const asyncHandler = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
 // ===== CLASS & PRODUCT DATA =====
 const CLASSES = [
@@ -77,7 +91,7 @@ function optionalAuth(req, res, next) {
 // =============================================
 
 // POST /api/auth/register
-app.post('/api/auth/register', async (req, res) => {
+app.post('/api/auth/register', asyncHandler(async (req, res) => {
     const { name, email, phone, password } = req.body;
     if (!name || !email || !phone || !password) {
         return res.status(400).json({ success: false, error: 'All fields are required' });
@@ -119,10 +133,10 @@ app.post('/api/auth/register', async (req, res) => {
         token,
         user: { id: user.id, name: user.name, email: user.email, phone: user.phone, role: user.role }
     });
-});
+}));
 
 // POST /api/auth/login
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/auth/login', asyncHandler(async (req, res) => {
     const { email, password } = req.body;
     if (!email || !password) {
         return res.status(400).json({ success: false, error: 'Email and password required' });
@@ -153,7 +167,7 @@ app.post('/api/auth/login', async (req, res) => {
         token,
         user: { id: user.id, name: user.name, email: user.email, phone: user.phone, role: user.role }
     });
-});
+}));
 
 // GET /api/auth/me
 app.get('/api/auth/me', authMiddleware, (req, res) => {
@@ -299,20 +313,29 @@ app.post('/api/payments/verify', authMiddleware, (req, res) => {
 
     if (type === 'booking' && bookingId) {
         // Update booking payment status
-        const booking = db.bookings.find(b => b.id === bookingId);
-        if (booking) {
-            booking.paymentStatus = 'paid';
-            booking.paymentId = paymentId || `pay_demo_${Date.now().toString(36)}`;
-            booking.paidAt = new Date().toISOString();
-        }
+        const booking = db.bookings.find(b => b.id === bookingId && b.userId === req.user.id);
+        if (!booking) return res.status(404).json({ success: false, error: 'Booking not found' });
+
+        booking.paymentStatus = 'paid';
+        booking.paymentId = paymentId || `pay_demo_${Date.now().toString(36)}`;
+        booking.paidAt = new Date().toISOString();
+
         const rosterEntry = db.roster.find(r => r.id === bookingId);
         if (rosterEntry) {
             rosterEntry.paymentStatus = 'paid';
-            rosterEntry.paymentId = booking?.paymentId;
+            rosterEntry.paymentId = booking.paymentId;
         }
     }
 
     if (type === 'shop' && cartItems) {
+        if (!Array.isArray(cartItems) || cartItems.length === 0) {
+            return res.status(400).json({ success: false, error: 'Cart items are required' });
+        }
+        const orderTotal = Number(total);
+        if (!Number.isFinite(orderTotal) || orderTotal <= 0) {
+            return res.status(400).json({ success: false, error: 'Valid total is required' });
+        }
+
         // Create shop order
         const receiptId = `#ZB-${Date.now().toString(36).toUpperCase()}`;
         const order = {
@@ -320,7 +343,7 @@ app.post('/api/payments/verify', authMiddleware, (req, res) => {
             customer: { name: req.user.name, email: req.user.email, phone: req.user.phone },
             userId: req.user.id,
             items: cartItems,
-            total,
+            total: orderTotal,
             paymentId: paymentId || `pay_demo_${Date.now().toString(36)}`,
             paymentStatus: 'paid',
             placedAt: new Date().toISOString()
@@ -469,6 +492,12 @@ app.post('/api/promo/validate', (req, res) => {
     const pct = PROMO_CODES[code?.toUpperCase()];
     if (pct) res.json({ success: true, code: code.toUpperCase(), discountPct: pct });
     else res.json({ success: false, error: 'Invalid promo code' });
+});
+
+app.use((err, req, res, next) => {
+    console.error('SERVER ERROR:', err);
+    if (res.headersSent) return next(err);
+    res.status(500).json({ success: false, error: 'Something went wrong. Please try again.' });
 });
 
 // =============================================

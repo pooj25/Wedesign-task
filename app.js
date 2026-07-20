@@ -146,6 +146,13 @@ const STATE = {
 /* ===== DOM HELPERS ===== */
 const $ = id => document.getElementById(id);
 const fmt = n => `₹${parseFloat(n).toLocaleString('en-IN')}`;
+const escapeHTML = value => String(value ?? '').replace(/[&<>"']/g, ch => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+}[ch]));
 
 /* ===== AUTH UI ===== */
 function updateAuthUI() {
@@ -664,6 +671,11 @@ function initCheckoutModal() {
 
         // Create payment order
         const payOrderRes = await apiFetch('POST', '/payments/create-order', { amount: total, type: 'shop' });
+        if (!payOrderRes.success) {
+            payBtn.disabled = false; payBtn.textContent = 'Pay Now 🔒';
+            showToast(`❌ ${payOrderRes.error || 'Payment setup failed'}`);
+            return;
+        }
 
         const demoPaymentId = `pay_demo_${Date.now().toString(36)}`;
 
@@ -710,13 +722,13 @@ function renderAccount() {
             bookingsList.innerHTML = STATE.bookings.map(b => `
             <div class="acc-entry">
                 <div>
-                    <div class="acc-entry-title">${b.className}</div>
-                    <div class="acc-entry-meta">${b.time} · ${b.instructor}</div>
-                    <div class="acc-entry-meta" style="color:var(--primary);font-size:0.75rem;margin-top:2px;">🎫 ${b.id} ${b.paymentStatus === 'paid' ? '· ✅ Paid' : '· ⏳ Pending'}</div>
+                    <div class="acc-entry-title">${escapeHTML(b.className)}</div>
+                    <div class="acc-entry-meta">${escapeHTML(b.time)} · ${escapeHTML(b.instructor)}</div>
+                    <div class="acc-entry-meta" style="color:var(--primary);font-size:0.75rem;margin-top:2px;">🎫 ${escapeHTML(b.id)} ${b.paymentStatus === 'paid' ? '· ✅ Paid' : '· ⏳ Pending'}</div>
                 </div>
                 <div style="display:flex;flex-direction:column;align-items:flex-end;gap:0.5rem;">
                     <span class="acc-entry-amount">${fmt(b.price)}</span>
-                    <button class="btn-cancel-slot" data-cancel-booking="${b.id}">Cancel</button>
+                    <button class="btn-cancel-slot" data-cancel-booking="${escapeHTML(b.id)}">Cancel</button>
                 </div>
             </div>`).join('');
             bookingsList.querySelectorAll('[data-cancel-booking]').forEach(btn => {
@@ -737,7 +749,7 @@ function renderAccount() {
             ordersList.innerHTML = STATE.orders.map(o => `
             <div class="acc-entry">
                 <div>
-                    <div class="acc-entry-title">${o.receiptId}</div>
+                    <div class="acc-entry-title">${escapeHTML(o.receiptId)}</div>
                     <div class="acc-entry-meta">${o.items.length} item(s) · ${new Date(o.placedAt).toLocaleDateString('en-IN', { dateStyle: 'medium' })} · ${o.paymentStatus === 'paid' ? '✅ Paid' : '⏳'}</div>
                 </div>
                 <span class="acc-entry-amount">${fmt(o.total)}</span>
@@ -778,13 +790,13 @@ async function renderRosterTable(filter = 'all') {
     }
     body.innerHTML = STATE.roster.map(r => `
     <tr>
-        <td><div class="student-name">${r.name || 'Unknown'}</div></td>
-        <td><div class="student-contact">${r.phone || r.email || '—'}</div></td>
-        <td><span class="ticket-code">${r.id}</span></td>
+        <td><div class="student-name">${escapeHTML(r.name || 'Unknown')}</div></td>
+        <td><div class="student-contact">${escapeHTML(r.phone || r.email || '—')}</div></td>
+        <td><span class="ticket-code">${escapeHTML(r.id)}</span></td>
         <td><span class="amount-paid">${fmt(r.price || 0)}</span></td>
-        <td style="font-size:0.82rem;color:var(--text-muted);">${r.className} · <span style="color:var(--text)">${r.time?.split('·')[1]?.trim() || r.time}</span></td>
+        <td style="font-size:0.82rem;color:var(--text-muted);">${escapeHTML(r.className)} · <span style="color:var(--text)">${escapeHTML(r.time?.split('·')[1]?.trim() || r.time)}</span></td>
         <td><span class="status-chip ${r.attended ? 'present' : 'scheduled'}">${r.attended ? '✓ Present' : '⏳ Scheduled'}</span></td>
-        <td><button class="btn-mark-present ${r.attended ? 'is-checked' : ''}" data-toggle-attend="${r.id}">${r.attended ? '✓ Present' : 'Mark Present'}</button></td>
+        <td><button class="btn-mark-present ${r.attended ? 'is-checked' : ''}" data-toggle-attend="${escapeHTML(r.id)}">${r.attended ? '✓ Present' : 'Mark Present'}</button></td>
     </tr>`).join('');
 
     body.querySelectorAll('[data-toggle-attend]').forEach(btn => {
